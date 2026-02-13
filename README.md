@@ -1,9 +1,75 @@
 # ESP32 Reticulum Network Stack Gateway Node
 ## Technical Specification Document
-**Document Version:** 2.0  
+**Document Version:** 2.1  
 **Classification:** Unclassified  
-**Date:** 2025-12-31  
+**Date:** 2026-02-13  
 **System Designation:** ESP32-RNS-GW
+
+---
+
+## ⚡ UPDATE: Heltec WiFi LoRa 32 V2 Support Added
+
+Support has been added for the **Heltec WiFi LoRa 32 V2** board (ESP32 original with SX1276 LoRa radio).
+
+### Quick Installation for Heltec V2
+
+1. **Copy the updated files** to your project:
+   - `platformio.ini` → project root
+   - `include/Config.h` → `include/` directory  
+   - `src/InterfaceManager.cpp` → `src/` directory
+
+2. **Build and upload:**
+   ```bash
+   pio run -e heltec_wifi_lora_32_V2
+   pio run -e heltec_wifi_lora_32_V2 --target upload
+   ```
+
+3. **Monitor output:**
+   ```bash
+   pio device monitor -b 115200
+   ```
+
+### V2 Hardware Specifications
+
+| Feature | Value |
+|---------|-------|
+| MCU | ESP32 (Xtensa dual-core, 240 MHz) |
+| LoRa Chip | SX1276 (868/915 MHz) |
+| Bluetooth | Classic + BLE |
+| OLED | SSD1306 128x64 (built-in) |
+| Vext Control | GPIO21 (required for LoRa/OLED power) |
+
+### V2 Pin Mapping
+
+| Function | GPIO | Notes |
+|----------|------|-------|
+| LoRa CS | 18 | SPI Chip Select |
+| LoRa RST | 14 | Reset |
+| LoRa DIO0 | 26 | IRQ/Interrupt |
+| LoRa SCK | 5 | SPI Clock |
+| LoRa MISO | 19 | SPI Data In |
+| LoRa MOSI | 27 | SPI Data Out |
+| Vext | 21 | Power control (LOW=ON) |
+| KISS RX | 13 | Serial input (alternate) |
+| KISS TX | 12 | Serial output (alternate) |
+| LED | 25 | User LED |
+| OLED SDA | 4 | I2C Data |
+| OLED SCL | 15 | I2C Clock |
+| OLED RST | 16 | Display Reset |
+
+### V2 Key Differences from V3/V4
+
+- **Vext Power Control**: V2 requires GPIO21 set LOW before LoRa module will operate
+- **UART Conflict**: Default UART2 RX (GPIO16) conflicts with OLED_RST; firmware uses GPIO12/13 instead
+- **LoRa Chip**: V2 uses SX1276 (compatible with SX1278 driver), V3/V4 use SX1262
+
+### V2 Troubleshooting
+
+If LoRa fails to initialize:
+- Verify Vext is enabled (GPIO21 should be LOW)
+- Check SPI connections: SCK=5, MISO=19, MOSI=27, CS=18
+- Ensure antenna is connected
+- Check serial output for error codes
 
 ---
 
@@ -20,6 +86,7 @@ This specification applies to all ESP32-based hardware platforms including but n
 - ESP32-C5 series microcontrollers
 - ESP32-C6 series microcontrollers
 - ESP32 (original) series microcontrollers
+- Heltec LoRa32 v2 development boards **(NEW)**
 - Heltec LoRa32 v3/v4 development boards
 
 ### 1.3 Document Structure
@@ -192,6 +259,14 @@ The system supports the following interface types:
 - **GPIO Pins**: 16 (RX), 17 (TX) for UART2
 - **Bluetooth**: Available
 
+#### 4.2.5 Heltec WiFi LoRa 32 V2
+- **UART**: UART0 (debug), UART2 (KISS interface)
+- **GPIO Pins**: 13 (RX), 12 (TX) for UART2 (alternate pins to avoid OLED conflict)
+- **Bluetooth**: Available (Classic + BLE)
+- **LoRa**: SX1276 on SPI (SCK=5, MISO=19, MOSI=27, CS=18, RST=14, DIO0=26)
+- **Vext**: GPIO21 must be LOW to enable LoRa/OLED power
+- **OLED**: SSD1306 128x64 on I2C (SDA=4, SCL=15, RST=16)
+
 ### 4.3 Optional Hardware
 - **LoRa Module**: SX1278-compatible (for LoRa interface)
 - **HAM TNC**: KISS-compatible terminal node controller
@@ -222,59 +297,66 @@ The system supports the following interface types:
 ### 5.4 Configuration Requirements
 - **WiFi Credentials**: SSID and password (for WiFi interface)
 - **Node Address**: Auto-generated on first boot, stored in EEPROM
-- **Interface Selection**: Enabled via build flags
 
 ---
 
 ## 6.0 INSTALLATION AND CONFIGURATION PROCEDURES
 
-### 6.1 Pre-Installation Requirements
-1. Verify hardware compatibility (Section 4.0)
-2. Install development environment (Section 5.1)
-3. Install required libraries (Section 5.2)
-4. Obtain WiFi credentials (if WiFi interface required)
+### 6.1 Installation Procedure
 
-### 6.2 Installation Procedure
+#### 6.1.1 Prerequisites
+1. Install PlatformIO CLI or VS Code with PlatformIO extension
+2. Clone or download firmware repository
+3. Connect ESP32 device via USB
 
-#### 6.2.1 Repository Acquisition
+#### 6.1.2 Build and Flash
+
+**For Heltec WiFi LoRa 32 V2:**
 ```bash
-git clone https://github.com/AkitaEngineering/ESP32-C3-Reticulum-Node
-cd ESP32-C3-Reticulum-Node
+# Build firmware
+pio run -e heltec_wifi_lora_32_V2
+
+# Upload firmware
+pio run -e heltec_wifi_lora_32_V2 --target upload
+
+# Monitor serial output
+pio device monitor -b 115200
 ```
 
-#### 6.2.2 Configuration
-1. Open `include/Config.h`
-2. Configure WiFi credentials:
-   ```cpp
-   const char *WIFI_SSID = "your_ssid";
-   const char *WIFI_PASSWORD = "your_password";
-   ```
-3. Configure interface selection via `platformio.ini` build flags
-4. Configure platform-specific parameters (UART pins, etc.)
-
-#### 6.2.3 Build Procedure
-**PlatformIO Method:**
+**For Heltec LoRa32 V3:**
 ```bash
-pio run -e <environment_name>
+pio run -e heltec_wifi_lora_32_V3
+pio run -e heltec_wifi_lora_32_V3 --target upload
 ```
 
-**Arduino IDE Method:**
-1. Open `src/main.cpp` as sketch
-2. Select target board from Tools menu
-3. Select COM port
-4. Click Upload
+**For ESP32-C3:**
+```bash
+pio run -e esp32-c3-devkitm-1
+pio run -e esp32-c3-devkitm-1 --target upload
+```
 
-#### 6.2.4 Verification
-1. Connect to serial monitor (115200 baud)
-2. Verify boot messages
-3. Verify node address generation/loading
-4. Verify interface initialization
+**For generic ESP32:**
+```bash
+pio run -e esp32dev
+pio run -e esp32dev --target upload
+```
 
-### 6.3 Post-Installation Configuration
+### 6.2 Available Build Environments
+
+| Environment | Board | LoRa Support |
+|-------------|-------|--------------|
+| `esp32-c3-devkitm-1` | ESP32-C3 DevKit | No |
+| `esp32dev` | Generic ESP32 | No |
+| `esp32-s2-devkitm-1` | ESP32-S2 DevKit | No |
+| `esp32-s3-devkitc-1` | ESP32-S3 DevKit | No |
+| `heltec_wifi_lora_32_V2` | Heltec V2 | Yes (SX1276) |
+| `heltec_wifi_lora_32_V3` | Heltec V3 | Yes (SX1262) |
+
+### 6.3 Configuration
 
 #### 6.3.1 Interface Configuration
-- **WiFi**: Configure SSID/password in `Config.h`
-- **LoRa**: Configure frequency, bandwidth, spreading factor
+- **WiFi**: Configure SSID/password in `Config.h` or `Config.cpp`
+- **LoRa**: Configure frequency, bandwidth, spreading factor in `Config.h`
 - **HAM Modem**: Configure callsign, SSID, TNC baud rate
 - **IPFS**: Configure gateway URL (if different from default)
 
@@ -458,6 +540,13 @@ Bytes 19+:  Payload data
 3. Reduce payload size if needed
 4. Disable unused interfaces
 
+#### 10.2.5 Heltec V2 LoRa Not Initializing
+1. Verify Vext is enabled (GPIO21 should be LOW)
+2. Check SPI connections: SCK=5, MISO=19, MOSI=27, CS=18
+3. Verify antenna is properly connected
+4. Check serial output for RadioLib error codes
+5. Ensure 100ms delay after enabling Vext before LoRa init
+
 ### 10.3 Diagnostic Commands
 - **Serial Monitor**: Provides real-time status and debug information
 - **Memory Status**: Printed every 15 seconds (default)
@@ -484,6 +573,12 @@ See `include/Config.h` for all configurable parameters.
 - `docs/ENHANCED_FEATURES.md`: Enhanced features documentation
 
 ### Appendix D: Revision History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 2.1 | 2026-02-13 | Added Heltec WiFi LoRa 32 V2 support |
+| 2.0 | 2025-12-31 | Initial release |
+
 See `CHANGELOG.md` for complete revision history.
 
 ---

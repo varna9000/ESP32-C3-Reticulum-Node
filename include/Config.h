@@ -36,7 +36,9 @@ public:
 
 extern DebugSerialShim DebugSerial; // Use USB/UART0 for debug (Arduino Serial Monitor)
 
+// ============================================================================
 // Platform-specific UART configuration
+// ============================================================================
 // ESP32-C3, ESP32-C5, ESP32-C6: Only UART0 and UART1 (no UART2)
 // ESP32, ESP32-S2, ESP32-S3: UART0, UART1, and UART2
 #if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C6)
@@ -52,9 +54,7 @@ extern DebugSerialShim DebugSerial; // Use USB/UART0 for debug (Arduino Serial M
         #define KISS_UART_TX 19   // ESP32-C6 UART1 default TX pin
     #endif
 #else
-    // Default: prefer a UART that exists on the target. ESP32-S2 does not
-    // provide a Serial2 in the Arduino core, so use Serial1 there. ESP32-S3
-    // and original ESP32 typically provide Serial2.
+    // ESP32, ESP32-S2, ESP32-S3 variants
     #if defined(CONFIG_IDF_TARGET_ESP32S2)
         #define KissSerial Serial1    // Use UART1 for KISS on ESP32-S2
         #define KISS_UART_RX 33       // ESP32-S2 UART1 RX pin (adjust if needed)
@@ -63,10 +63,16 @@ extern DebugSerialShim DebugSerial; // Use USB/UART0 for debug (Arduino Serial M
         #define KissSerial Serial2    // Use UART2 for KISS
         #define KISS_UART_RX 17       // ESP32-S3 UART2 RX pin
         #define KISS_UART_TX 18       // ESP32-S3 UART2 TX pin
+    #elif defined(HELTEC_LORA32_V2)
+        // Heltec V2: GPIO16 is used for OLED_RST, must use alternate pins
+        #define KissSerial Serial2    // Use UART2 for KISS
+        #define KISS_UART_RX 13       // Avoid conflict with OLED_RST (GPIO16)
+        #define KISS_UART_TX 12       // Alternative TX pin
     #else
+        // Generic ESP32 original
         #define KissSerial Serial2    // Use UART2 for KISS (ESP32 original)
-        #define KISS_UART_RX 16      // ESP32 (original) UART2 RX pin
-        #define KISS_UART_TX 17      // ESP32 (original) UART2 TX pin
+        #define KISS_UART_RX 16       // ESP32 (original) UART2 RX pin
+        #define KISS_UART_TX 17       // ESP32 (original) UART2 TX pin
     #endif
 #endif
 
@@ -134,10 +140,45 @@ const std::vector<std::array<uint8_t, RNS_ADDRESS_SIZE>> SUBSCRIBED_GROUPS = {
 
 };
 
-// --- LoRa Configuration ---
+// ============================================================================
+// LoRa Configuration
+// ============================================================================
 #ifdef LORA_ENABLED
+
+    // ========================================================================
+    // Heltec LoRa32 V2 (ESP32 original) pin definitions
+    // ========================================================================
+    #if defined(HELTEC_LORA32_V2)
+        // LoRa SPI pins (VSPI bus)
+        #define LORA_CS_PIN 18        // Chip Select
+        #define LORA_RST_PIN 14       // Reset
+        #define LORA_DIO0_PIN 26      // IRQ/Interrupt
+        #define LORA_SPI_SCK 5        // SPI Clock
+        #define LORA_SPI_MISO 19      // SPI Data In
+        #define LORA_SPI_MOSI 27      // SPI Data Out
+        
+        // Optional DIO pins (input only on V2)
+        #define LORA_DIO1_PIN 35      // Optional: CAD detection
+        #define LORA_DIO2_PIN 34      // Optional: Frequency hopping
+        
+        // V2-specific hardware control pins
+        #define HELTEC_V2_VEXT_PIN 21       // External power control (LOW=ON, HIGH=OFF)
+        #define HELTEC_V2_LED_PIN 25        // User LED (active HIGH)
+        #define HELTEC_V2_PRG_BUTTON 0      // PRG/Boot button
+        
+        // V2 OLED display pins (SSD1306, 128x64)
+        #define HELTEC_V2_OLED_SDA 4        // OLED I2C SDA
+        #define HELTEC_V2_OLED_SCL 15       // OLED I2C SCL
+        #define HELTEC_V2_OLED_RST 16       // OLED Reset
+        #define HELTEC_V2_OLED_ADDR 0x3C    // I2C address
+        
+        // Default frequency (adjust for your region)
+        #define LORA_FREQUENCY 915.0        // MHz (US: 915, EU: 868)
+        
+    // ========================================================================
     // Heltec LoRa32 v3 (ESP32-S3) pin definitions
-    #if defined(HELTEC_LORA32_V3)
+    // ========================================================================
+    #elif defined(HELTEC_LORA32_V3)
         #define LORA_CS_PIN 8
         #define LORA_RST_PIN 12
         #define LORA_DIO0_PIN 14
@@ -145,7 +186,10 @@ const std::vector<std::array<uint8_t, RNS_ADDRESS_SIZE>> SUBSCRIBED_GROUPS = {
         #define LORA_SPI_MISO 11
         #define LORA_SPI_MOSI 10
         #define LORA_FREQUENCY 915.0  // MHz (adjust for your region)
+        
+    // ========================================================================
     // Heltec LoRa32 v4 (ESP32-C6) pin definitions
+    // ========================================================================
     #elif defined(HELTEC_LORA32_V4)
         #define LORA_CS_PIN 8
         #define LORA_RST_PIN 12
@@ -154,7 +198,10 @@ const std::vector<std::array<uint8_t, RNS_ADDRESS_SIZE>> SUBSCRIBED_GROUPS = {
         #define LORA_SPI_MISO 11
         #define LORA_SPI_MOSI 10
         #define LORA_FREQUENCY 915.0  // MHz (adjust for your region)
+        
+    // ========================================================================
     // Generic LoRa configuration (customize for your board)
+    // ========================================================================
     #else
         #define LORA_CS_PIN 5
         #define LORA_RST_PIN 14
@@ -165,6 +212,7 @@ const std::vector<std::array<uint8_t, RNS_ADDRESS_SIZE>> SUBSCRIBED_GROUPS = {
         #define LORA_FREQUENCY 915.0  // MHz (adjust for your region)
     #endif
     
+    // Common LoRa parameters (can be overridden per-board if needed)
     #define LORA_BANDWIDTH 125.0  // kHz
     #define LORA_SPREADING_FACTOR 7
     #define LORA_CODING_RATE 5
@@ -174,7 +222,9 @@ const std::vector<std::array<uint8_t, RNS_ADDRESS_SIZE>> SUBSCRIBED_GROUPS = {
     #define LORA_GAIN 0  // 0 = automatic gain control
 #endif
 
-// --- HAM Modem Configuration ---
+// ============================================================================
+// HAM Modem Configuration
+// ============================================================================
 #ifdef HAM_MODEM_ENABLED
     // HAM modem interface configuration
     // Most HAM TNCs use KISS protocol over serial, which we already support
@@ -197,8 +247,16 @@ const std::vector<std::array<uint8_t, RNS_ADDRESS_SIZE>> SUBSCRIBED_GROUPS = {
     #define AUDIO_MODEM_MARK_FREQ 1200     // Hz (Bell 202 mark frequency)
     #define AUDIO_MODEM_SPACE_FREQ 2200    // Hz (Bell 202 space frequency)
     #define AUDIO_MODEM_BAUD_RATE 1200     // baud (Bell 202 standard)
-    #define AUDIO_MODEM_RX_PIN 34          // ADC pin for audio input
-    #define AUDIO_MODEM_TX_PIN 25          // DAC pin for audio output (ESP32)
+    
+    // Audio modem pins - board specific
+    #if defined(HELTEC_LORA32_V2)
+        // V2: Use ADC1 pins (ADC2 conflicts with WiFi)
+        #define AUDIO_MODEM_RX_PIN 36     // ADC1_0 (VP) - audio input
+        #define AUDIO_MODEM_TX_PIN 25     // DAC2/LED pin - may conflict with LED
+    #else
+        #define AUDIO_MODEM_RX_PIN 34     // ADC pin for audio input
+        #define AUDIO_MODEM_TX_PIN 25     // DAC pin for audio output (ESP32)
+    #endif
     
     // AX.25 Protocol Configuration
     #define AX25_ENABLED 1
@@ -215,7 +273,9 @@ const std::vector<std::array<uint8_t, RNS_ADDRESS_SIZE>> SUBSCRIBED_GROUPS = {
     #define WINLINK_PASSWORD ""            // <<< CHANGE ME: Winlink password (if required)
 #endif
 
-// --- IPFS Configuration ---
+// ============================================================================
+// IPFS Configuration
+// ============================================================================
 #ifdef IPFS_ENABLED
     // IPFS gateway configuration (lightweight client approach)
     #define IPFS_GATEWAY_URL "https://ipfs.io/ipfs/"  // Public IPFS gateway
@@ -230,7 +290,9 @@ const std::vector<std::array<uint8_t, RNS_ADDRESS_SIZE>> SUBSCRIBED_GROUPS = {
     #define IPFS_PUBLISH_TIMEOUT_MS 30000 // Publishing timeout (longer for large files)
 #endif
 
-// --- Interface Identifiers ---
+// ============================================================================
+// Interface Identifiers
+// ============================================================================
 enum class InterfaceType {
     UNKNOWN,
     LOCAL, // For packets originating from this node

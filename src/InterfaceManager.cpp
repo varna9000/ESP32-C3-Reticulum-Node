@@ -122,8 +122,12 @@ void InterfaceManager::loop() {
 }
 
 void InterfaceManager::setupSerial() {
-    // KissSerial (Serial2) is started in main.cpp for KISS interface
-    DebugSerial.println("IF: KISS Serial interface ready on Serial2 (GPIO16/17).");
+    // KissSerial is started in main.cpp for KISS interface
+    #if defined(HELTEC_LORA32_V2)
+        DebugSerial.println("IF: KISS Serial interface ready on Serial2 (GPIO12/13 - V2 alternate pins).");
+    #else
+        DebugSerial.println("IF: KISS Serial interface ready on Serial2 (GPIO16/17).");
+    #endif
 }
 
 void InterfaceManager::setupWiFi() {
@@ -462,10 +466,29 @@ void InterfaceManager::staticEspNowSendCallback(const uint8_t *mac_addr, esp_now
 void InterfaceManager::setupLoRa() {
     DebugSerial.println("IF: Initializing LoRa...");
     
+    // ========================================================================
+    // V2-specific: Enable Vext power supply for LoRa module
+    // Vext controls external 3.3V power for LoRa and OLED on Heltec V2
+    // GPIO21: LOW = Power ON, HIGH = Power OFF
+    // ========================================================================
+    #if defined(HELTEC_LORA32_V2)
+        DebugSerial.println("IF: Heltec V2 detected - enabling Vext power...");
+        pinMode(HELTEC_V2_VEXT_PIN, OUTPUT);
+        digitalWrite(HELTEC_V2_VEXT_PIN, LOW);  // LOW = power ON
+        delay(100);  // Allow power to stabilize before LoRa init
+        DebugSerial.println("IF: V2 Vext power enabled (GPIO21 = LOW)");
+        
+        // Optional: Initialize user LED
+        pinMode(HELTEC_V2_LED_PIN, OUTPUT);
+        digitalWrite(HELTEC_V2_LED_PIN, LOW);  // LED off initially
+    #endif
+    
     // Initialize SPI for LoRa
-    // Use VSPI (SPI3) for ESP32, HSPI for other variants
-    #if defined(CONFIG_IDF_TARGET_ESP32)
+    // Use VSPI (SPI3) for ESP32 original (including V2), HSPI for other variants
+    #if defined(CONFIG_IDF_TARGET_ESP32) || defined(HELTEC_LORA32_V2)
         SPIClass* spi = new SPIClass(VSPI);
+    #elif defined(CONFIG_IDF_TARGET_ESP32S3)
+        SPIClass* spi = new SPIClass(HSPI);
     #else
         SPIClass* spi = new SPIClass(HSPI);
     #endif
@@ -475,7 +498,7 @@ void InterfaceManager::setupLoRa() {
     // Create LoRa module instance with SPI settings
     Module* loraModule = new Module(LORA_CS_PIN, LORA_DIO0_PIN, LORA_RST_PIN, RADIOLIB_NC, *spi, SPISettings(2000000, MSBFIRST, SPI_MODE0));
     
-    // Create SX1278 instance
+    // Create SX1278 instance (compatible with SX1276 on V2)
     _lora = new SX1278(loraModule);
     
     // Initialize LoRa with configuration
@@ -487,10 +510,26 @@ void InterfaceManager::setupLoRa() {
         DebugSerial.print("IF: Frequency: "); DebugSerial.print(LORA_FREQUENCY); DebugSerial.println(" MHz");
         DebugSerial.print("IF: Bandwidth: "); DebugSerial.print(LORA_BANDWIDTH); DebugSerial.println(" kHz");
         DebugSerial.print("IF: Spreading Factor: "); DebugSerial.println(LORA_SPREADING_FACTOR);
+        
+        #if defined(HELTEC_LORA32_V2)
+            // Blink LED to indicate successful LoRa init
+            digitalWrite(HELTEC_V2_LED_PIN, HIGH);
+            delay(100);
+            digitalWrite(HELTEC_V2_LED_PIN, LOW);
+        #endif
     } else {
         _loraInitialized = false;
         DebugSerial.print("! ERROR: LoRa initialization failed with code: ");
         DebugSerial.println(state);
+        
+        #if defined(HELTEC_LORA32_V2)
+            // Print V2-specific troubleshooting info
+            DebugSerial.println("! V2 Troubleshooting:");
+            DebugSerial.println("!   - Check that Vext is enabled (GPIO21 should be LOW)");
+            DebugSerial.println("!   - Verify SPI connections: SCK=5, MISO=19, MOSI=27, CS=18");
+            DebugSerial.println("!   - Check LoRa module power supply");
+        #endif
+        
         delete _lora;
         _lora = nullptr;
     }
