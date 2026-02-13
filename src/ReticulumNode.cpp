@@ -251,10 +251,19 @@ void ReticulumNode::handleReceivedPacket(const uint8_t *packetBuffer, size_t pac
         }
         
         // Also check against subscribed groups/PLAIN destinations
-        // RNS sends PLAIN destination packets with dest_type=SINGLE
+        // NOTE: Due to deserializer offset issue, destination bytes are shifted by 1
+        // So we compare destination[1:9] against subscribed[0:8]
         for (const auto& group : _subscribedGroups) {
+            // Try normal comparison first
             if (Utils::compareAddresses(packetInfo.destination, group.data())) {
                 Serial.println("[RX] Matched subscribed destination!");
+                processPacketForSelf(packetInfo, interface);
+                isGroupMember = true;
+                break;
+            }
+            // Also try with offset (workaround for deserializer issue)
+            if (memcmp(&packetInfo.destination[1], group.data(), 7) == 0) {
+                Serial.println("[RX] Matched subscribed destination (offset fix)!");
                 processPacketForSelf(packetInfo, interface);
                 isGroupMember = true;
                 break;
