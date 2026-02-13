@@ -557,6 +557,15 @@ void InterfaceManager::setupLoRa() {
         DebugSerial.print("IF: Bandwidth: "); DebugSerial.print(LORA_BANDWIDTH); DebugSerial.println(" kHz");
         DebugSerial.print("IF: Spreading Factor: "); DebugSerial.println(LORA_SPREADING_FACTOR);
         
+        // CRITICAL: Put radio into continuous receive mode!
+        int rxState = _lora->startReceive();
+        if (rxState == RADIOLIB_ERR_NONE) {
+            Serial.println("IF: LoRa radio now in receive mode.");
+        } else {
+            Serial.print("! WARN: Failed to start LoRa receive mode, code: ");
+            Serial.println(rxState);
+        }
+        
         #if defined(HELTEC_LORA32_V2)
             // Blink LED to indicate successful LoRa init
             digitalWrite(HELTEC_V2_LED_PIN, HIGH);
@@ -611,6 +620,7 @@ void InterfaceManager::processLoRaInput() {
             Serial.print("! WARN: Invalid LoRa packet size: ");
             Serial.println(packetSize);
             _lora->clearIrqFlags(_lora->getIrqFlags());
+            _lora->startReceive();
             return;
         }
         
@@ -619,6 +629,7 @@ void InterfaceManager::processLoRaInput() {
         if (!loraBuffer) {
             Serial.println("! ERROR: Failed to allocate LoRa receive buffer!");
             _lora->clearIrqFlags(_lora->getIrqFlags());
+            _lora->startReceive();
             return;
         }
         
@@ -649,8 +660,9 @@ void InterfaceManager::processLoRaInput() {
             Serial.println(state);
         }
         
-        // Clear IRQ flags to prepare for next packet
+        // Clear IRQ flags and go back to receive mode
         _lora->clearIrqFlags(_lora->getIrqFlags());
+        _lora->startReceive();
     }
 }
 
@@ -663,11 +675,14 @@ void InterfaceManager::sendPacketViaLoRa(const uint8_t *packetBuffer, size_t pac
     int state = _lora->transmit(packetBuffer, packetLen);
     if (state == RADIOLIB_ERR_NONE) {
         // Success - packet sent
-        // DebugSerial.println("IF: LoRa packet sent successfully.");
+        Serial.println("[LoRa TX] Packet sent successfully.");
     } else {
-        DebugSerial.print("! ERROR: LoRa transmit failed with code: ");
-        DebugSerial.println(state);
+        Serial.print("! ERROR: LoRa transmit failed with code: ");
+        Serial.println(state);
     }
+    
+    // CRITICAL: Go back to receive mode after transmitting!
+    _lora->startReceive();
 }
 #endif
 
