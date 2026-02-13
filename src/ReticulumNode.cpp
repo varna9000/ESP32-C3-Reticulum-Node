@@ -210,14 +210,32 @@ void ReticulumNode::sendAnnounceIfNeeded() {
 void ReticulumNode::handleReceivedPacket(const uint8_t *packetBuffer, size_t packetLen, InterfaceType interface,
                                            const uint8_t* sender_mac, const IPAddress& sender_ip, uint16_t sender_port)
 {
+    // Always log incoming packets for debugging
+    Serial.print("[RX] Packet received, len=");
+    Serial.print(packetLen);
+    Serial.print(", interface=");
+    Serial.println(static_cast<int>(interface));
+    
     RnsPacketInfo packetInfo;
     if (!ReticulumPacket::deserialize(packetBuffer, packetLen, packetInfo)) {
-        // DebugSerial.println("! Deserialize failed in Node. Discarding."); // Verbose
+        Serial.println("[RX] ! Deserialize FAILED");
         return;
     }
+    
+    Serial.print("[RX] Deserialized OK - dest_type=");
+    Serial.print(packetInfo.destination_type, HEX);
+    Serial.print(", header_type=");
+    Serial.print(packetInfo.header_type, HEX);
+    Serial.print(", context=");
+    Serial.print(packetInfo.context, HEX);
+    Serial.print(", payload_len=");
+    Serial.println(packetInfo.payload.size());
 
     // Ignore packets sourced from self that might have looped back
-    if (Utils::compareAddresses(packetInfo.source, _nodeAddress)) { return; }
+    if (Utils::compareAddresses(packetInfo.source, _nodeAddress)) { 
+        Serial.println("[RX] Ignoring packet from self");
+        return; 
+    }
 
     // --- 1. Link Layer Packet Handling ---
     if (packetInfo.context == RNS_CONTEXT_LINK_REQ ||
@@ -242,10 +260,14 @@ void ReticulumNode::handleReceivedPacket(const uint8_t *packetBuffer, size_t pac
     bool processedLocally = false;
     bool isGroupMember = false;
 
+    Serial.print("[RX] Checking destination match... dest_type=");
+    Serial.println(packetInfo.destination_type, HEX);
+
     // Check destination: Single Address Match
     if (packetInfo.destination_type == RNS_DST_TYPE_SINGLE &&
         Utils::compareAddresses(packetInfo.destination, _nodeAddress))
     {
+        Serial.println("[RX] -> SINGLE address match!");
         processPacketForSelf(packetInfo, interface);
         // Do not forward packets addressed directly to this node
         return;
@@ -253,8 +275,10 @@ void ReticulumNode::handleReceivedPacket(const uint8_t *packetBuffer, size_t pac
     // Check destination: Group Address Match
     else if (packetInfo.destination_type == RNS_DST_TYPE_GROUP)
     {
+        Serial.println("[RX] -> Checking GROUP addresses...");
         for (const auto& group : _subscribedGroups) {
             if (Utils::compareAddresses(packetInfo.destination, group.data())) {
+                Serial.println("[RX] -> GROUP match!");
                 processPacketForSelf(packetInfo, interface);
                 isGroupMember = true; // Mark that we processed it as a group member
                 break; // Processed locally, but MUST continue to forwarding
@@ -264,14 +288,28 @@ void ReticulumNode::handleReceivedPacket(const uint8_t *packetBuffer, size_t pac
     // Check destination: PLAIN destination (unencrypted broadcast) - compare first 8 bytes of hash
     else if (packetInfo.destination_type == RNS_DEST_PLAIN)
     {
+        Serial.print("[RX] -> Checking PLAIN dest hash: ");
+        for(int i=0; i<8; i++) { Serial.print(packetInfo.destination_hash[i], HEX); Serial.print(" "); }
+        Serial.println();
         for (const auto& group : _subscribedGroups) {
+            Serial.print("[RX]    vs subscribed: ");
+            for(int i=0; i<8; i++) { Serial.print(group[i], HEX); Serial.print(" "); }
+            Serial.println();
             // PLAIN destinations use a 16-byte hash, but we compare first 8 bytes
             if (Utils::compareAddresses(packetInfo.destination_hash, group.data())) {
+                Serial.println("[RX] -> PLAIN match!");
                 processPacketForSelf(packetInfo, interface);
                 isGroupMember = true; // Mark that we processed it
                 break; // Processed locally, but MUST continue to forwarding
             }
         }
+        if (!isGroupMember) {
+            Serial.println("[RX] -> No PLAIN match found");
+        }
+    }
+    else {
+        Serial.print("[RX] -> Unknown dest_type: ");
+        Serial.println(packetInfo.destination_type, HEX);
     }
 
     // --- 4. Forwarding Logic (If not single-addressed to self) ---
