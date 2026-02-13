@@ -13,18 +13,13 @@ Support has been added for the **Heltec WiFi LoRa 32 V2** board (ESP32 original 
 
 ### Quick Installation for Heltec V2
 
-1. **Copy the updated files** to your project:
-   - `platformio.ini` → project root
-   - `include/Config.h` → `include/` directory  
-   - `src/InterfaceManager.cpp` → `src/` directory
-
-2. **Build and upload:**
+ **Build and upload:**
    ```bash
    pio run -e heltec_wifi_lora_32_V2
    pio run -e heltec_wifi_lora_32_V2 --target upload
    ```
 
-3. **Monitor output:**
+ **Monitor output:**
    ```bash
    pio device monitor -b 115200
    ```
