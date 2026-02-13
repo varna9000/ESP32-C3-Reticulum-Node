@@ -592,36 +592,17 @@ void InterfaceManager::setupLoRa() {
 void InterfaceManager::processLoRaInput() {
     if (!_loraInitialized || !_lora) return;
     
-    // Periodic status check (every 10 seconds)
-    static unsigned long lastCheck = 0;
-    if (millis() - lastCheck > 10000) {
-        lastCheck = millis();
-        uint16_t irqFlags = _lora->getIrqFlags();
-        Serial.print("[LoRa] Status - IRQ: 0x");
-        Serial.print(irqFlags, HEX);
-        Serial.print(", RSSI: ");
-        Serial.print(_lora->getRSSI());
-        Serial.println(" dBm");
-    }
-    
     // Check for RX done using IRQ flags (bit 6 = RxDone for SX1276)
     uint16_t irqFlags = _lora->getIrqFlags();
     bool rxDone = (irqFlags & 0x40);  // RxDone flag
     
-    // Also try available() as backup
-    int avail = _lora->available();
-    
-    if (rxDone || avail > 0) {
-        Serial.print("[LoRa RX] Detected! IRQ=0x");
-        Serial.print(irqFlags, HEX);
-        Serial.print(" avail=");
-        Serial.println(avail);
-        
-        // Determine packet size
+    if (rxDone) {
         size_t packetSize = _lora->getPacketLength();
         
-        Serial.print("[LoRa RX] Packet size: ");
-        Serial.println(packetSize);
+        Serial.print("[LoRa RX] size=");
+        Serial.print(packetSize);
+        Serial.print(" RSSI=");
+        Serial.println(_lora->getRSSI());
         
         if (packetSize == 0 || packetSize > MAX_PACKET_SIZE) {
             Serial.print("! WARN: Invalid LoRa packet size: ");
