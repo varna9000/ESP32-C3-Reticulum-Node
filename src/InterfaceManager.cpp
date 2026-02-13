@@ -475,8 +475,18 @@ void InterfaceManager::setupLoRa() {
         DebugSerial.println("IF: Heltec V2 detected - enabling Vext power...");
         pinMode(HELTEC_V2_VEXT_PIN, OUTPUT);
         digitalWrite(HELTEC_V2_VEXT_PIN, LOW);  // LOW = power ON
-        delay(100);  // Allow power to stabilize before LoRa init
+        delay(100);  // Allow power to stabilize
         DebugSerial.println("IF: V2 Vext power enabled (GPIO21 = LOW)");
+        
+        // CRITICAL: Reset the LoRa chip after power-on
+        // The SX1276 needs a proper reset pulse to initialize correctly
+        DebugSerial.println("IF: Resetting LoRa module (RST=GPIO14)...");
+        pinMode(LORA_RST_PIN, OUTPUT);
+        digitalWrite(LORA_RST_PIN, LOW);   // Pull RST low
+        delay(20);                          // Hold reset for 20ms
+        digitalWrite(LORA_RST_PIN, HIGH);  // Release reset
+        delay(50);                          // Wait for chip to boot
+        DebugSerial.println("IF: LoRa reset complete");
         
         // Optional: Initialize user LED
         pinMode(HELTEC_V2_LED_PIN, OUTPUT);
@@ -491,6 +501,14 @@ void InterfaceManager::setupLoRa() {
         SPIClass* spi = new SPIClass(HSPI);
     #else
         SPIClass* spi = new SPIClass(HSPI);
+    #endif
+    
+    #if defined(HELTEC_LORA32_V2)
+        DebugSerial.println("IF: Configuring SPI for V2...");
+        DebugSerial.print("IF:   SCK="); DebugSerial.print(LORA_SPI_SCK);
+        DebugSerial.print(" MISO="); DebugSerial.print(LORA_SPI_MISO);
+        DebugSerial.print(" MOSI="); DebugSerial.print(LORA_SPI_MOSI);
+        DebugSerial.print(" CS="); DebugSerial.println(LORA_CS_PIN);
     #endif
     
     spi->begin(LORA_SPI_SCK, LORA_SPI_MISO, LORA_SPI_MOSI, LORA_CS_PIN);
@@ -522,12 +540,26 @@ void InterfaceManager::setupLoRa() {
         DebugSerial.print("! ERROR: LoRa initialization failed with code: ");
         DebugSerial.println(state);
         
+        // Decode common RadioLib error codes
+        switch(state) {
+            case -2:  DebugSerial.println("!   RADIOLIB_ERR_CHIP_NOT_FOUND - SPI communication failed"); break;
+            case -6:  DebugSerial.println("!   RADIOLIB_ERR_RX_TIMEOUT"); break;
+            case -7:  DebugSerial.println("!   RADIOLIB_ERR_CRC_MISMATCH"); break;
+            case -8:  DebugSerial.println("!   RADIOLIB_ERR_INVALID_BANDWIDTH"); break;
+            case -9:  DebugSerial.println("!   RADIOLIB_ERR_INVALID_SPREADING_FACTOR"); break;
+            case -10: DebugSerial.println("!   RADIOLIB_ERR_INVALID_CODING_RATE"); break;
+            case -12: DebugSerial.println("!   RADIOLIB_ERR_INVALID_FREQUENCY - Check board variant (868/915 MHz)"); break;
+            default:  DebugSerial.println("!   See RadioLib documentation for error code details"); break;
+        }
+        
         #if defined(HELTEC_LORA32_V2)
             // Print V2-specific troubleshooting info
             DebugSerial.println("! V2 Troubleshooting:");
             DebugSerial.println("!   - Check that Vext is enabled (GPIO21 should be LOW)");
             DebugSerial.println("!   - Verify SPI connections: SCK=5, MISO=19, MOSI=27, CS=18");
             DebugSerial.println("!   - Check LoRa module power supply");
+            DebugSerial.println("!   - Try changing LORA_FREQUENCY to 868.0 if you have EU variant");
+            DebugSerial.print("!   - Current frequency setting: "); DebugSerial.print(LORA_FREQUENCY); DebugSerial.println(" MHz");
         #endif
         
         delete _lora;

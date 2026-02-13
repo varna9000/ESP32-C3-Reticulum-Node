@@ -172,8 +172,17 @@ const std::vector<std::array<uint8_t, RNS_ADDRESS_SIZE>> SUBSCRIBED_GROUPS = {
         #define HELTEC_V2_OLED_RST 16       // OLED Reset
         #define HELTEC_V2_OLED_ADDR 0x3C    // I2C address
         
-        // Default frequency (adjust for your region)
-        #define LORA_FREQUENCY 915.0        // MHz (US: 915, EU: 868)
+        // =====================================================================
+        // IMPORTANT: Set frequency based on your board variant!
+        // Heltec V2 comes in different regional versions:
+        //   - 868 MHz version (EU) - antenna tuned for 863-870 MHz
+        //   - 915 MHz version (US) - antenna tuned for 902-928 MHz
+        //   - 433 MHz version (Asia) - antenna tuned for 433 MHz
+        // Using the wrong frequency will cause RADIOLIB_ERR_INVALID_FREQUENCY (-12)
+        // =====================================================================
+        // #define LORA_FREQUENCY 433.0      // MHz (Asia variant)
+        #define LORA_FREQUENCY 868.0         // MHz (EU variant)
+        // #define LORA_FREQUENCY 915.0      // MHz (US variant)
         
     // ========================================================================
     // Heltec LoRa32 v3 (ESP32-S3) pin definitions
