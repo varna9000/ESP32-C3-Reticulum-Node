@@ -475,18 +475,15 @@ void InterfaceManager::setupLoRa() {
         DebugSerial.println("IF: Heltec V2 detected - enabling Vext power...");
         pinMode(HELTEC_V2_VEXT_PIN, OUTPUT);
         digitalWrite(HELTEC_V2_VEXT_PIN, LOW);  // LOW = power ON
-        delay(100);  // Allow power to stabilize
+        delay(200);  // Allow power to fully stabilize (increased from 100ms)
         DebugSerial.println("IF: V2 Vext power enabled (GPIO21 = LOW)");
         
-        // CRITICAL: Reset the LoRa chip after power-on
-        // The SX1276 needs a proper reset pulse to initialize correctly
-        DebugSerial.println("IF: Resetting LoRa module (RST=GPIO14)...");
-        pinMode(LORA_RST_PIN, OUTPUT);
-        digitalWrite(LORA_RST_PIN, LOW);   // Pull RST low
-        delay(20);                          // Hold reset for 20ms
-        digitalWrite(LORA_RST_PIN, HIGH);  // Release reset
-        delay(50);                          // Wait for chip to boot
-        DebugSerial.println("IF: LoRa reset complete");
+        // Initialize OLED reset pin (must be HIGH for OLED to work, also shares some lines)
+        pinMode(HELTEC_V2_OLED_RST, OUTPUT);
+        digitalWrite(HELTEC_V2_OLED_RST, LOW);
+        delay(50);
+        digitalWrite(HELTEC_V2_OLED_RST, HIGH);
+        delay(50);
         
         // Optional: Initialize user LED
         pinMode(HELTEC_V2_LED_PIN, OUTPUT);
@@ -509,14 +506,44 @@ void InterfaceManager::setupLoRa() {
         DebugSerial.print(" MISO="); DebugSerial.print(LORA_SPI_MISO);
         DebugSerial.print(" MOSI="); DebugSerial.print(LORA_SPI_MOSI);
         DebugSerial.print(" CS="); DebugSerial.println(LORA_CS_PIN);
+        DebugSerial.print("IF:   RST="); DebugSerial.print(LORA_RST_PIN);
+        DebugSerial.print(" DIO0="); DebugSerial.println(LORA_DIO0_PIN);
     #endif
     
     spi->begin(LORA_SPI_SCK, LORA_SPI_MISO, LORA_SPI_MOSI, LORA_CS_PIN);
     
-    // Create LoRa module instance with SPI settings
-    Module* loraModule = new Module(LORA_CS_PIN, LORA_DIO0_PIN, LORA_RST_PIN, RADIOLIB_NC, *spi, SPISettings(2000000, MSBFIRST, SPI_MODE0));
+    #if defined(HELTEC_LORA32_V2)
+        // Manually test SPI communication by reading version register
+        pinMode(LORA_CS_PIN, OUTPUT);
+        digitalWrite(LORA_CS_PIN, HIGH);
+        delay(10);
+        
+        // Try to read the SX127x version register (0x42) - should return 0x12
+        digitalWrite(LORA_CS_PIN, LOW);
+        spi->transfer(0x42);  // Read register 0x42 (version)
+        uint8_t version = spi->transfer(0x00);
+        digitalWrite(LORA_CS_PIN, HIGH);
+        
+        DebugSerial.print("IF: SX127x version register: 0x");
+        DebugSerial.println(version, HEX);
+        
+        if (version == 0x12) {
+            DebugSerial.println("IF: SX1276/SX1278 detected!");
+        } else if (version == 0x22) {
+            DebugSerial.println("IF: SX1272 detected!");
+        } else if (version == 0x00 || version == 0xFF) {
+            DebugSerial.println("! WARN: No response from LoRa chip - check wiring/power!");
+        } else {
+            DebugSerial.print("! WARN: Unexpected chip version: 0x");
+            DebugSerial.println(version, HEX);
+        }
+    #endif
     
-    // Create SX1278 instance (compatible with SX1276 on V2)
+    // Create LoRa module instance with SPI settings
+    // Use slower SPI speed (1MHz) for more reliable communication
+    Module* loraModule = new Module(LORA_CS_PIN, LORA_DIO0_PIN, LORA_RST_PIN, RADIOLIB_NC, *spi, SPISettings(1000000, MSBFIRST, SPI_MODE0));
+    
+    // Create SX1278 instance (compatible with SX1276 on V2 - same register set)
     _lora = new SX1278(loraModule);
     
     // Initialize LoRa with configuration
