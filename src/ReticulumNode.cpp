@@ -230,6 +230,22 @@ void ReticulumNode::handleReceivedPacket(const uint8_t *packetBuffer, size_t pac
     Serial.print(packetInfo.context, HEX);
     Serial.print(", payload_len=");
     Serial.println(packetInfo.payload.size());
+    
+    Serial.print("[RX] Destination bytes: ");
+    for(int i=0; i<16; i++) { 
+        if(packetInfo.destination[i] < 0x10) Serial.print("0");
+        Serial.print(packetInfo.destination[i], HEX); 
+        Serial.print(" "); 
+    }
+    Serial.println();
+    
+    Serial.print("[RX] Payload bytes: ");
+    for(size_t i=0; i<packetInfo.payload.size() && i<16; i++) { 
+        if(packetInfo.payload[i] < 0x10) Serial.print("0");
+        Serial.print(packetInfo.payload[i], HEX); 
+        Serial.print(" "); 
+    }
+    Serial.println();
 
     // Ignore packets sourced from self that might have looped back
     if (Utils::compareAddresses(packetInfo.source, _nodeAddress)) { 
@@ -263,14 +279,36 @@ void ReticulumNode::handleReceivedPacket(const uint8_t *packetBuffer, size_t pac
     Serial.print("[RX] Checking destination match... dest_type=");
     Serial.println(packetInfo.destination_type, HEX);
 
-    // Check destination: Single Address Match
-    if (packetInfo.destination_type == RNS_DST_TYPE_SINGLE &&
-        Utils::compareAddresses(packetInfo.destination, _nodeAddress))
+    // Check destination: Single Address Match (also used by PLAIN destinations from RNS)
+    if (packetInfo.destination_type == RNS_DST_TYPE_SINGLE)
     {
-        Serial.println("[RX] -> SINGLE address match!");
-        processPacketForSelf(packetInfo, interface);
-        // Do not forward packets addressed directly to this node
-        return;
+        // First check if it's addressed to our node address
+        if (Utils::compareAddresses(packetInfo.destination, _nodeAddress)) {
+            Serial.println("[RX] -> SINGLE address match (our node)!");
+            processPacketForSelf(packetInfo, interface);
+            return;
+        }
+        
+        // Also check against subscribed groups/PLAIN destinations
+        // RNS sends PLAIN destination packets with dest_type=SINGLE
+        Serial.print("[RX] -> Checking SINGLE dest against subscribed: ");
+        for(int i=0; i<8; i++) { Serial.print(packetInfo.destination[i], HEX); Serial.print(" "); }
+        Serial.println();
+        
+        for (const auto& group : _subscribedGroups) {
+            Serial.print("[RX]    vs subscribed: ");
+            for(int i=0; i<8; i++) { Serial.print(group[i], HEX); Serial.print(" "); }
+            Serial.println();
+            if (Utils::compareAddresses(packetInfo.destination, group.data())) {
+                Serial.println("[RX] -> SINGLE/PLAIN match against subscribed group!");
+                processPacketForSelf(packetInfo, interface);
+                isGroupMember = true;
+                break;
+            }
+        }
+        if (!isGroupMember) {
+            Serial.println("[RX] -> No SINGLE match found");
+        }
     }
     // Check destination: Group Address Match
     else if (packetInfo.destination_type == RNS_DST_TYPE_GROUP)
@@ -280,27 +318,23 @@ void ReticulumNode::handleReceivedPacket(const uint8_t *packetBuffer, size_t pac
             if (Utils::compareAddresses(packetInfo.destination, group.data())) {
                 Serial.println("[RX] -> GROUP match!");
                 processPacketForSelf(packetInfo, interface);
-                isGroupMember = true; // Mark that we processed it as a group member
-                break; // Processed locally, but MUST continue to forwarding
+                isGroupMember = true;
+                break;
             }
         }
     }
-    // Check destination: PLAIN destination (unencrypted broadcast) - compare first 8 bytes of hash
+    // Check destination: PLAIN destination (legacy check)
     else if (packetInfo.destination_type == RNS_DEST_PLAIN)
     {
         Serial.print("[RX] -> Checking PLAIN dest hash: ");
         for(int i=0; i<8; i++) { Serial.print(packetInfo.destination_hash[i], HEX); Serial.print(" "); }
         Serial.println();
         for (const auto& group : _subscribedGroups) {
-            Serial.print("[RX]    vs subscribed: ");
-            for(int i=0; i<8; i++) { Serial.print(group[i], HEX); Serial.print(" "); }
-            Serial.println();
-            // PLAIN destinations use a 16-byte hash, but we compare first 8 bytes
             if (Utils::compareAddresses(packetInfo.destination_hash, group.data())) {
                 Serial.println("[RX] -> PLAIN match!");
                 processPacketForSelf(packetInfo, interface);
-                isGroupMember = true; // Mark that we processed it
-                break; // Processed locally, but MUST continue to forwarding
+                isGroupMember = true;
+                break;
             }
         }
         if (!isGroupMember) {
