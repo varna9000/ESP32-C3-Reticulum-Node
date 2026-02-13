@@ -1,6 +1,6 @@
 # ESP32 Reticulum Network Stack Gateway Node
 ## Technical Specification Document
-**Document Version:** 2.1  
+**Document Version:** 2.2  
 **Classification:** Unclassified  
 **Date:** 2026-02-13  
 **System Designation:** ESP32-RNS-GW
@@ -11,15 +11,25 @@
 
 Support has been added for the **Heltec WiFi LoRa 32 V2** board (ESP32 original with SX1276 LoRa radio).
 
-### Quick Installation for Heltec V2
+**New in v2.2:** Remote GPIO control via received messages - turn pins ON/OFF, toggle, PWM control.
 
- **Build and upload:**
+### Quick Start for Heltec V2
+
+1. **Clone the repository**
+
+2. **Configure WiFi** in `src/Config.cpp`:
+   ```cpp
+   const char *WIFI_SSID = "YourSSID";
+   const char *WIFI_PASSWORD = "YourPassword";
+   ```
+
+3. **Build and upload:**
    ```bash
    pio run -e heltec_wifi_lora_32_V2
    pio run -e heltec_wifi_lora_32_V2 --target upload
    ```
 
- **Monitor output:**
+4. **Monitor output:**
    ```bash
    pio device monitor -b 115200
    ```
@@ -65,6 +75,85 @@ If LoRa fails to initialize:
 - Check SPI connections: SCK=5, MISO=19, MOSI=27, CS=18
 - Ensure antenna is connected
 - Check serial output for error codes
+
+---
+
+## ⚡ GPIO Remote Control Feature
+
+The firmware supports remote GPIO control via received messages. When a message is received over any interface (LoRa, WiFi, ESP-NOW, Bluetooth), it can trigger GPIO actions.
+
+### Supported Commands
+
+| Command | Action |
+|---------|--------|
+| `ON` or `1` or `HIGH` | Turn control pin ON |
+| `OFF` or `0` or `LOW` | Turn control pin OFF |
+| `TOGGLE` or `T` | Toggle pin state |
+| `STATUS` or `?` | Print current pin state to serial |
+| `PWM:<0-255>` | Set PWM duty cycle (e.g., `PWM:128`) |
+| `PIN:<gpio>:<state>` | Control any GPIO (e.g., `PIN:13:ON`) |
+
+### Configuration
+
+Edit `src/main.cpp` to configure the control pin:
+
+```cpp
+// At the top of main.cpp
+#define CONTROL_PIN 25              // GPIO25 = Heltec V2 onboard LED
+#define CONTROL_PIN_ACTIVE_HIGH true // true = HIGH turns ON
+```
+
+**For relay modules** (typically active-low):
+```cpp
+#define CONTROL_PIN 12
+#define CONTROL_PIN_ACTIVE_HIGH false  // LOW triggers relay
+```
+
+### Example Use Cases
+
+| Use Case | Pin | Config |
+|----------|-----|--------|
+| Onboard LED indicator | GPIO25 | `CONTROL_PIN_ACTIVE_HIGH true` |
+| Relay module | GPIO12 | `CONTROL_PIN_ACTIVE_HIGH false` |
+| External LED | GPIO13 | `CONTROL_PIN_ACTIVE_HIGH true` |
+| Buzzer/Alarm | GPIO14 | `CONTROL_PIN_ACTIVE_HIGH true` |
+
+### Sending Commands
+
+**From Python with Reticulum:**
+```python
+import RNS
+
+reticulum = RNS.Reticulum()
+identity = RNS.Identity()
+dest = RNS.Destination(
+    identity,
+    RNS.Destination.OUT,
+    RNS.Destination.PLAIN,
+    "esp32", "node"
+)
+link = RNS.Link(dest)
+link.send("ON".encode())  # or "OFF", "TOGGLE", "PWM:128"
+```
+
+**From another ESP32 node:**
+```cpp
+const char* cmd = "TOGGLE";
+std::vector<uint8_t> payload((uint8_t*)cmd, (uint8_t*)cmd + strlen(cmd));
+// ... serialize and send packet
+```
+
+### Adding Custom Commands
+
+Edit the `myAppDataReceiver()` function in `src/main.cpp`:
+
+```cpp
+else if (message == "MYCOMMAND") {
+    // Your custom action here
+    digitalWrite(SOME_PIN, HIGH);
+    DebugSerial.println("Custom command executed!");
+}
+```
 
 ---
 
@@ -571,6 +660,7 @@ See `include/Config.h` for all configurable parameters.
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.2 | 2026-02-13 | Added GPIO remote control feature |
 | 2.1 | 2026-02-13 | Added Heltec WiFi LoRa 32 V2 support |
 | 2.0 | 2025-12-31 | Initial release |
 
