@@ -475,15 +475,8 @@ void InterfaceManager::setupLoRa() {
         DebugSerial.println("IF: Heltec V2 detected - enabling Vext power...");
         pinMode(HELTEC_V2_VEXT_PIN, OUTPUT);
         digitalWrite(HELTEC_V2_VEXT_PIN, LOW);  // LOW = power ON
-        delay(200);  // Allow power to fully stabilize (increased from 100ms)
+        delay(100);  // Allow power to stabilize
         DebugSerial.println("IF: V2 Vext power enabled (GPIO21 = LOW)");
-        
-        // Initialize OLED reset pin (must be HIGH for OLED to work, also shares some lines)
-        pinMode(HELTEC_V2_OLED_RST, OUTPUT);
-        digitalWrite(HELTEC_V2_OLED_RST, LOW);
-        delay(50);
-        digitalWrite(HELTEC_V2_OLED_RST, HIGH);
-        delay(50);
         
         // Optional: Initialize user LED
         pinMode(HELTEC_V2_LED_PIN, OUTPUT);
@@ -513,12 +506,10 @@ void InterfaceManager::setupLoRa() {
     spi->begin(LORA_SPI_SCK, LORA_SPI_MISO, LORA_SPI_MOSI, LORA_CS_PIN);
     
     #if defined(HELTEC_LORA32_V2)
-        // Manually test SPI communication by reading version register
+        // Quick SPI check - read version register before RadioLib takes over
         pinMode(LORA_CS_PIN, OUTPUT);
         digitalWrite(LORA_CS_PIN, HIGH);
         delay(10);
-        
-        // Try to read the SX127x version register (0x42) - should return 0x12
         digitalWrite(LORA_CS_PIN, LOW);
         spi->transfer(0x42);  // Read register 0x42 (version)
         uint8_t version = spi->transfer(0x00);
@@ -526,16 +517,10 @@ void InterfaceManager::setupLoRa() {
         
         DebugSerial.print("IF: SX127x version register: 0x");
         DebugSerial.println(version, HEX);
-        
         if (version == 0x12) {
             DebugSerial.println("IF: SX1276/SX1278 detected!");
-        } else if (version == 0x22) {
-            DebugSerial.println("IF: SX1272 detected!");
         } else if (version == 0x00 || version == 0xFF) {
             DebugSerial.println("! WARN: No response from LoRa chip - check wiring/power!");
-        } else {
-            DebugSerial.print("! WARN: Unexpected chip version: 0x");
-            DebugSerial.println(version, HEX);
         }
     #endif
     
@@ -607,13 +592,35 @@ void InterfaceManager::setupLoRa() {
 void InterfaceManager::processLoRaInput() {
     if (!_loraInitialized || !_lora) return;
     
-    // Check if data is available
-    if (_lora->available()) {
-        // Determine packet size (LoRa can receive variable length packets)
+    // Periodic status check (every 10 seconds)
+    static unsigned long lastCheck = 0;
+    if (millis() - lastCheck > 10000) {
+        lastCheck = millis();
+        uint16_t irqFlags = _lora->getIrqFlags();
+        Serial.print("[LoRa] Status - IRQ: 0x");
+        Serial.print(irqFlags, HEX);
+        Serial.print(", RSSI: ");
+        Serial.print(_lora->getRSSI());
+        Serial.println(" dBm");
+    }
+    
+    // Check for RX done using IRQ flags (bit 6 = RxDone for SX1276)
+    uint16_t irqFlags = _lora->getIrqFlags();
+    bool rxDone = (irqFlags & 0x40);  // RxDone flag
+    
+    // Also try available() as backup
+    int avail = _lora->available();
+    
+    if (rxDone || avail > 0) {
+        Serial.print("[LoRa RX] Detected! IRQ=0x");
+        Serial.print(irqFlags, HEX);
+        Serial.print(" avail=");
+        Serial.println(avail);
+        
+        // Determine packet size
         size_t packetSize = _lora->getPacketLength();
         
-        // Always log LoRa reception (not gated by DEBUG_ENABLED)
-        Serial.print("[LoRa RX] Packet available, size: ");
+        Serial.print("[LoRa RX] Packet size: ");
         Serial.println(packetSize);
         
         if (packetSize == 0 || packetSize > MAX_PACKET_SIZE) {
