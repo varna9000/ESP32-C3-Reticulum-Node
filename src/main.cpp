@@ -28,10 +28,10 @@ void setControlPin(bool state) {
     } else {
         digitalWrite(CONTROL_PIN, state ? LOW : HIGH);  // Inverted for active-low relays
     }
-    DebugSerial.print(">> Control pin ");
-    DebugSerial.print(CONTROL_PIN);
-    DebugSerial.print(" set to: ");
-    DebugSerial.println(state ? "ON" : "OFF");
+    Serial.print(">> Control pin ");
+    Serial.print(CONTROL_PIN);
+    Serial.print(" set to: ");
+    Serial.println(state ? "ON" : "OFF");
 }
 
 // ============================================================================
@@ -39,11 +39,12 @@ void setControlPin(bool state) {
 // ============================================================================
 void myAppDataReceiver(const uint8_t *source_address, const std::vector<uint8_t> &data)
 {
-    DebugSerial.print("\n<<<< App Layer Received ");
-    DebugSerial.print(data.size());
-    DebugSerial.print(" bytes from ");
-    Utils::printBytes(source_address, RNS_ADDRESS_SIZE, DebugSerial);
-    DebugSerial.println();
+    // Always log (not gated by DEBUG_ENABLED)
+    Serial.print("\n>>>> MESSAGE RECEIVED! ");
+    Serial.print(data.size());
+    Serial.print(" bytes from ");
+    Utils::printBytes(source_address, RNS_ADDRESS_SIZE, Serial);
+    Serial.println();
     
     // Convert data to string for easy parsing
     String message = "";
@@ -53,9 +54,9 @@ void myAppDataReceiver(const uint8_t *source_address, const std::vector<uint8_t>
     message.trim();  // Remove whitespace
     message.toUpperCase();  // Case-insensitive matching
     
-    DebugSerial.print("Message: \"");
-    DebugSerial.print(message);
-    DebugSerial.println("\"");
+    Serial.print("Message: \"");
+    Serial.print(message);
+    Serial.println("\"");
     
     // ========================================================================
     // Command parsing - Add your own commands here!
@@ -71,10 +72,10 @@ void myAppDataReceiver(const uint8_t *source_address, const std::vector<uint8_t>
         setControlPin(!controlPinState);
     }
     else if (message == "STATUS" || message == "?") {
-        DebugSerial.print(">> Status: Pin ");
-        DebugSerial.print(CONTROL_PIN);
-        DebugSerial.print(" is ");
-        DebugSerial.println(controlPinState ? "ON" : "OFF");
+        Serial.print(">> Status: Pin ");
+        Serial.print(CONTROL_PIN);
+        Serial.print(" is ");
+        Serial.println(controlPinState ? "ON" : "OFF");
         // TODO: You could send a response packet back here
     }
     else if (message.startsWith("PWM:")) {
@@ -82,8 +83,8 @@ void myAppDataReceiver(const uint8_t *source_address, const std::vector<uint8_t>
         int pwmValue = message.substring(4).toInt();
         pwmValue = constrain(pwmValue, 0, 255);
         analogWrite(CONTROL_PIN, pwmValue);
-        DebugSerial.print(">> PWM set to: ");
-        DebugSerial.println(pwmValue);
+        Serial.print(">> PWM set to: ");
+        Serial.println(pwmValue);
     }
     else if (message.startsWith("PIN:")) {
         // Example: "PIN:13:ON" or "PIN:13:OFF" - control any pin
@@ -95,18 +96,18 @@ void myAppDataReceiver(const uint8_t *source_address, const std::vector<uint8_t>
             pinMode(pin, OUTPUT);
             if (state == "ON" || state == "1" || state == "HIGH") {
                 digitalWrite(pin, HIGH);
-                DebugSerial.print(">> GPIO"); DebugSerial.print(pin); DebugSerial.println(" = HIGH");
+                Serial.print(">> GPIO"); Serial.print(pin); Serial.println(" = HIGH");
             } else if (state == "OFF" || state == "0" || state == "LOW") {
                 digitalWrite(pin, LOW);
-                DebugSerial.print(">> GPIO"); DebugSerial.print(pin); DebugSerial.println(" = LOW");
+                Serial.print(">> GPIO"); Serial.print(pin); Serial.println(" = LOW");
             }
         }
     }
     else {
-        DebugSerial.println(">> Unknown command. Valid commands:");
-        DebugSerial.println("   ON, OFF, TOGGLE, STATUS");
-        DebugSerial.println("   PWM:<0-255>");
-        DebugSerial.println("   PIN:<gpio>:<ON|OFF>");
+        Serial.println(">> Unknown command. Valid commands:");
+        Serial.println("   ON, OFF, TOGGLE, STATUS");
+        Serial.println("   PWM:<0-255>");
+        Serial.println("   PIN:<gpio>:<ON|OFF>");
     }
 }
 

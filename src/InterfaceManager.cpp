@@ -602,9 +602,14 @@ void InterfaceManager::processLoRaInput() {
     if (_lora->available()) {
         // Determine packet size (LoRa can receive variable length packets)
         size_t packetSize = _lora->getPacketLength();
+        
+        // Always log LoRa reception (not gated by DEBUG_ENABLED)
+        Serial.print("[LoRa RX] Packet available, size: ");
+        Serial.println(packetSize);
+        
         if (packetSize == 0 || packetSize > MAX_PACKET_SIZE) {
-            DebugSerial.print("! WARN: Invalid LoRa packet size: ");
-            DebugSerial.println(packetSize);
+            Serial.print("! WARN: Invalid LoRa packet size: ");
+            Serial.println(packetSize);
             _lora->clearIrqFlags(_lora->getIrqFlags());
             return;
         }
@@ -612,7 +617,7 @@ void InterfaceManager::processLoRaInput() {
         // Allocate buffer for received packet
         std::unique_ptr<uint8_t[]> loraBuffer(new (std::nothrow) uint8_t[packetSize]);
         if (!loraBuffer) {
-            DebugSerial.println("! ERROR: Failed to allocate LoRa receive buffer!");
+            Serial.println("! ERROR: Failed to allocate LoRa receive buffer!");
             _lora->clearIrqFlags(_lora->getIrqFlags());
             return;
         }
@@ -620,14 +625,28 @@ void InterfaceManager::processLoRaInput() {
         // Read packet data
         int state = _lora->readData(loraBuffer.get(), packetSize);
         if (state == RADIOLIB_ERR_NONE) {
+            // Log received data (always on)
+            Serial.print("[LoRa RX] Success! RSSI: ");
+            Serial.print(_lora->getRSSI());
+            Serial.print(" dBm, SNR: ");
+            Serial.print(_lora->getSNR());
+            Serial.print(" dB, Data: ");
+            for (size_t i = 0; i < min(packetSize, (size_t)32); i++) {
+                if (loraBuffer[i] < 0x10) Serial.print("0");
+                Serial.print(loraBuffer[i], HEX);
+                Serial.print(" ");
+            }
+            if (packetSize > 32) Serial.print("...");
+            Serial.println();
+            
             // Pass received packet to packet receiver callback
             // LoRa doesn't have MAC addresses, so use nullptr
             if (_packetReceiver) {
                 _packetReceiver(loraBuffer.get(), packetSize, InterfaceType::LORA, nullptr, IPAddress(), 0);
             }
         } else {
-            DebugSerial.print("! WARN: LoRa read failed with code: ");
-            DebugSerial.println(state);
+            Serial.print("! WARN: LoRa read failed with code: ");
+            Serial.println(state);
         }
         
         // Clear IRQ flags to prepare for next packet
