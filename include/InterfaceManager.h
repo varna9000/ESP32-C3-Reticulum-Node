@@ -135,7 +135,10 @@ private:
 #endif
     KISSProcessor _serialKissProcessor; // KISS processor for USB Serial
 #ifdef LORA_ENABLED
-    SX1278* _lora; // LoRa radio instance
+    // LoRa radio instance
+    // Use SX1276 for 868/915 MHz bands (Heltec V2, most common)
+    // SX1276 supports 862-1020 MHz, SX1278 only supports 410-525 MHz
+    SX1276* _lora;
     bool _loraInitialized;
 #endif
 #ifdef HAM_MODEM_ENABLED

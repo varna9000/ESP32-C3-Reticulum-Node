@@ -543,8 +543,9 @@ void InterfaceManager::setupLoRa() {
     // Use slower SPI speed (1MHz) for more reliable communication
     Module* loraModule = new Module(LORA_CS_PIN, LORA_DIO0_PIN, LORA_RST_PIN, RADIOLIB_NC, *spi, SPISettings(1000000, MSBFIRST, SPI_MODE0));
     
-    // Create SX1278 instance (compatible with SX1276 on V2 - same register set)
-    _lora = new SX1278(loraModule);
+    // Create SX1276 instance for 868/915 MHz bands
+    // SX1276 supports 862-1020 MHz, SX1278 only supports 410-525 MHz
+    _lora = new SX1276(loraModule);
     
     // Initialize LoRa with configuration
     int state = _lora->begin(LORA_FREQUENCY, LORA_BANDWIDTH, LORA_SPREADING_FACTOR, LORA_CODING_RATE, LORA_SYNC_WORD, LORA_OUTPUT_POWER, LORA_PREAMBLE_LENGTH, LORA_GAIN);
